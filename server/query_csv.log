@@ -1,0 +1,32 @@
+2025-07-14 16:47:51,218 ERROR: Document not found for table 'csvtable' (doc_id: 50)
+2025-07-14 16:53:12,919 ERROR: Document not found for table 'csvtable' (doc_id: d1b9585e-57e5-4e9b-8030-dba7fef2d8fd)
+2025-07-14 16:56:39,489 ERROR: Document not found for table 'csvtable' (doc_id: d1b9585e-57e5-4e9b-8030-dba7fef2d8fd)
+2025-07-15 14:31:13,585 ERROR: Document not found for table 'csvtable' (doc_id: d1b9585e-57e5-4e9b-8030-dba7fef2d8fd)
+2025-07-15 14:33:40,971 ERROR: Document not found for table 'csvtable' (doc_id: d1b9585e-57e5-4e9b-8030-dba7fef2d8fd)
+2025-07-15 14:35:11,740 ERROR: Document not found for table 'csvtable' (doc_id: Indy 500 Race CSV.csv)
+2025-07-16 16:23:48,247 ERROR: Failed to load or parse data for table 'csvtable': Expecting value: line 1 column 1 (char 0)
+2025-07-17 08:46:39,830 ERROR: Document not found for table 'csvtable' (doc_id: Indy 500 Race CSV.json)
+2025-07-17 09:18:21,889 ERROR: Document not found for table 'csvtable' (doc_id: Indy 500 Race CSV.json)
+2025-07-17 15:53:32,256 ERROR: Document not found for table 'csvtable' (doc_id: Indy 500 Race CSV.json)
+2025-07-17 16:02:11,119 ERROR: Failed to load or parse data for table 'csvtable': Expecting value: line 1 column 1 (char 0)
+2025-07-17 16:19:42,584 ERROR: Failed to load or parse data for table 'csvtable': Expecting value: line 1 column 1 (char 0)
+2025-07-17 16:27:54,417 ERROR: Query failed: Invalid Input Error: Python Object "data" of type "list" found on line "C:\Users\james\Desktop\save\please\server\scripts\query_csv.py:90" not suitable for replacement scans.
+Make sure that "data" is either a pandas.DataFrame, duckdb.DuckDBPyRelation, pyarrow Table, Dataset, RecordBatchReader, Scanner, or NumPy ndarrays with supported format | Query: SELECT * FROM data WHERE "Year" = '1988'
+2025-07-17 16:41:55,966 ERROR: Query failed: Invalid Input Error: Python Object "data" of type "list" found on line "C:\Users\james\Desktop\save\please\server\scripts\query_csv.py:93" not suitable for replacement scans.
+Make sure that "data" is either a pandas.DataFrame, duckdb.DuckDBPyRelation, pyarrow Table, Dataset, RecordBatchReader, Scanner, or NumPy ndarrays with supported format | Query: SELECT * FROM data WHERE "Year" = '1988'
+2025-07-17 16:46:18,052 ERROR: Document not found for table 'csvtable' (doc_id: Indy 500 Race CSV.json)
+2025-07-17 16:47:39,205 INFO: Query succeeded: SELECT * FROM csvtable WHERE "Year" = '1988'
+2025-07-17 16:53:03,889 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = '1988'
+2025-07-17 16:53:57,285 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = '2020'
+2025-07-18 08:14:11,574 ERROR: Query failed: Parser Error: syntax error at or near "null" | Query: null
+2025-07-18 08:34:06,285 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = '1988'
+2025-07-18 08:41:30,239 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = '1988'
+2025-07-18 08:42:08,962 INFO: Query succeeded: SELECT * FROM csvtable WHERE "race_time" = 'from 2010 to 2020'
+2025-07-18 08:43:08,591 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = '2020'
+2025-07-18 08:43:22,787 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = '2008'
+2025-07-18 08:43:41,506 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = 's'
+2025-07-18 08:47:19,337 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = 'DESC LIMIT N'
+2025-07-18 08:50:20,598 ERROR: Query failed: Binder Error: Referenced column "N" not found in FROM clause!
+
+LINE 1: ... year, race_time FROM csvtable ORDER BY year DESC LIMIT N
+                                                                   ^ | Query: SELECT year, race_time FROM csvtable ORDER BY year DESC LIMIT N
