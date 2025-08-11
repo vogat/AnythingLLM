@@ -133,7 +133,7 @@ FROM build AS frontend-build
 COPY --chown=anythingllm:anythingllm ./frontend /app/frontend/
 WORKDIR /app/frontend
 RUN yarn install --network-timeout 100000 && yarn cache clean
-RUN yarn build && \
+RUN VITE_LOG_LEVEL=info DEBUG=vite:* yarn build && \
     cp -r dist /tmp/frontend-build && \
     rm -rf * && \
     cp -r /tmp/frontend-build dist && \
