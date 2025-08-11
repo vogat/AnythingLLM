@@ -132,8 +132,16 @@ WORKDIR /app
 FROM build AS frontend-build
 COPY --chown=anythingllm:anythingllm ./frontend /app/frontend/
 WORKDIR /app/frontend
-RUN yarn install --network-timeout 100000 && yarn cache clean
-RUN VITE_LOG_LEVEL=info DEBUG=vite:* yarn build && \
+RUN set -eux; \
+    VITE_LOG_LEVEL=info DEBUG=vite:* yarn build 2>&1 | tee /tmp/vite-build.log; \
+    status=${PIPESTATUS[0]}; \
+    if [ $status -ne 0 ]; then \
+      echo '---- Vite build FAILED. Showing first 120 lines ----'; \
+      head -n 120 /tmp/vite-build.log || true; \
+      echo '---- Showing last 200 lines ----'; \
+      tail -n 200 /tmp/vite-build.log || true; \
+      exit $status; \
+    fi; \
     cp -r dist /tmp/frontend-build && \
     rm -rf * && \
     cp -r /tmp/frontend-build dist && \
