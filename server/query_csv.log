@@ -30,3 +30,6 @@ Make sure that "data" is either a pandas.DataFrame, duckdb.DuckDBPyRelation, pya
 
 LINE 1: ... year, race_time FROM csvtable ORDER BY year DESC LIMIT N
                                                                    ^ | Query: SELECT year, race_time FROM csvtable ORDER BY year DESC LIMIT N
+2025-08-08 15:24:33,720 INFO: Query succeeded: SELECT * FROM csvtable WHERE "year" = 's'
+2025-08-11 10:35:01,470 INFO: Query succeeded: SELECT * FROM csvtable WHERE "race_time" = 'in 1998'
+2025-08-11 10:37:56,613 INFO: Query succeeded: SELECT "race_time" FROM csvtable WHERE "year" = 1998

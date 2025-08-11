@@ -31,10 +31,7 @@ const { communityHubEndpoints } = require("./endpoints/communityHub");
 const { agentFlowEndpoints } = require("./endpoints/agentFlows");
 const { mcpServersEndpoints } = require("./endpoints/mcpServers");
 
-const { csvQueryEndpoints } = require("./endpoints/csvQueryEndpoints");
-
 const app = express();
-app.use("/api", require("./endpoints/csvQueryEndpoints"));
 
 const apiRouter = express.Router();
 const FILE_LIMIT = "3GB";
@@ -56,6 +53,10 @@ if (!!process.env.ENABLE_HTTPS) {
 }
 
 app.use("/api", apiRouter);
+
+// Register CSV query endpoints under /api namespace
+apiRouter.use(require("./endpoints/csvQueryEndpoints"));
+
 systemEndpoints(apiRouter);
 extensionEndpoints(apiRouter);
 workspaceEndpoints(apiRouter);

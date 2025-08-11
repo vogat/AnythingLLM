@@ -11,6 +11,7 @@ const {
   recentChatHistory,
   sourceIdentifier,
 } = require("./index");
+const fetch = require("node-fetch");
 
 const VALID_CHAT_MODE = ["chat", "query"];
 
@@ -206,35 +207,37 @@ async function streamChatWithWorkspace(
 
     for (const source of csvSources) {
       try {
-        const queryResult = await queryCSV(source.id, message);
-        if (queryResult.success && queryResult.result) {
-          const result = queryResult.result;
+        // Call local REST endpoint which supports SQL and PandasAI routing
+        const res = await fetch("http://localhost:3001/api/query-csv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documentId: source.id, question: message })
+        });
+        const data = await res.json();
+        if (data.success && data.response) {
+          const result = data.response;
           let formattedResult = '';
 
-          switch (result.type) {
-            case 'dataframe':
-              // Format DataFrame results as a table
-              formattedResult = 'DataFrame Results:\n';
-              formattedResult += result.columns.join(' | ') + '\n';
-              formattedResult += '-'.repeat(result.columns.join(' | ').length) + '\n';
-              result.data.forEach(row => {
-                formattedResult += result.columns.map(col => row[col]).join(' | ') + '\n';
+          // Normalize common shapes
+          if (Array.isArray(result.answer)) {
+            const rows = result.answer;
+            if (rows.length) {
+              const columns = Object.keys(rows[0]);
+              formattedResult += columns.join(' | ') + '\n';
+              formattedResult += '-'.repeat(columns.join(' | ').length) + '\n';
+              rows.slice(0, 5).forEach(row => {
+                formattedResult += columns.map(col => String(row[col] ?? '')).join(' | ') + '\n';
               });
-              break;
-            case 'series':
-              // Format Series results as key-value pairs
-              formattedResult = 'Series Results:\n';
-              Object.entries(result.data).forEach(([key, value]) => {
-                formattedResult += `${key}: ${value}\n`;
-              });
-              break;
-            case 'scalar':
-              // Format scalar results
-              formattedResult = `Result: ${result.data}`;
-              break;
-            case 'error':
-              formattedResult = `Error executing query: ${result.error}`;
-              break;
+            } else {
+              formattedResult = 'No rows matched your query.';
+            }
+          } else if (typeof result.answer === 'object') {
+            formattedResult = JSON.stringify(result.answer, null, 2);
+          } else if (typeof result.answer === 'string') {
+            formattedResult = result.answer;
+          }
+          if (result.code) {
+            formattedResult += `\n\nCode used (from PandasAI):\n\n\`\`\`python\n${result.code}\n\`\`\``;
           }
 
           // Add the query result to the context
@@ -265,6 +268,7 @@ async function streamChatWithWorkspace(
       type: "textResponse",
       textResponse,
       sources: [],
+      attachments,
       close: true,
       error: null,
       metrics: {},
@@ -281,7 +285,6 @@ async function streamChatWithWorkspace(
         metrics: {},
       },
       threadId: thread?.id || null,
-      apiSessionId: sessionId,
       include: false,
       user,
     });

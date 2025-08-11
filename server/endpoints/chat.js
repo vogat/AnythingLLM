@@ -75,7 +75,13 @@ function chatEndpoints(app) {
           console.log("[CSV HANDLER] Sending response chunk:", {
             id: uuidv4(),
             type: "final",
-            textResponse: error ? `Error: ${error}` : (csvResult.answer ?? csvResult.result ?? csvResult),
+            textResponse: (() => {
+              if (error) return `Error: ${error}`;
+              const base = csvResult.answer ?? csvResult.result ?? csvResult;
+              const code = csvResult.code || (csvResult.response && csvResult.response.code);
+              if (code) return `${typeof base === 'string' ? base : JSON.stringify(base)}\n\nCode used (from PandasAI):\n\n\`\`\`python\n${code}\n\`\`\``;
+              return base;
+            })(),
             metadata: csvResult.metadata || null,
             sources: [
               {
@@ -90,7 +96,13 @@ function chatEndpoints(app) {
           writeResponseChunk(response, {
             id: uuidv4(),
             type: "final",
-            textResponse: error ? `Error: ${error}` : (csvResult.answer ?? csvResult.result ?? csvResult),
+            textResponse: (() => {
+              if (error) return `Error: ${error}`;
+              const base = csvResult.answer ?? csvResult.result ?? csvResult;
+              const code = csvResult.code || (csvResult.response && csvResult.response.code);
+              if (code) return `${typeof base === 'string' ? base : JSON.stringify(base)}\n\nCode used (from PandasAI):\n\n\`\`\`python\n${code}\n\`\`\``;
+              return base;
+            })(),
             metadata: csvResult.metadata || null,
             sources: [
               {
@@ -220,7 +232,13 @@ function chatEndpoints(app) {
           console.log("[CSV HANDLER] Sending response chunk:", {
             id: uuidv4(),
             type: "final",
-            textResponse: error ? `Error: ${error}` : (csvResult.answer ?? csvResult.result ?? csvResult),
+            textResponse: (() => {
+              if (error) return `Error: ${error}`;
+              const base = csvResult.answer ?? csvResult.result ?? csvResult;
+              const code = csvResult.code || (csvResult.response && csvResult.response.code);
+              if (code) return `${typeof base === 'string' ? base : JSON.stringify(base)}\n\nCode used (from PandasAI):\n\n\`\`\`python\n${code}\n\`\`\``;
+              return base;
+            })(),
             metadata: csvResult.metadata || null,
             sources: [
               {
@@ -235,7 +253,13 @@ function chatEndpoints(app) {
           writeResponseChunk(response, {
             id: uuidv4(),
             type: "final",
-            textResponse: error ? `Error: ${error}` : (csvResult.answer ?? csvResult.result ?? csvResult),
+            textResponse: (() => {
+              if (error) return `Error: ${error}`;
+              const base = csvResult.answer ?? csvResult.result ?? csvResult;
+              const code = csvResult.code || (csvResult.response && csvResult.response.code);
+              if (code) return `${typeof base === 'string' ? base : JSON.stringify(base)}\n\nCode used (from PandasAI):\n\n\`\`\`python\n${code}\n\`\`\``;
+              return base;
+            })(),
             metadata: csvResult.metadata || null,
             sources: [
               {
@@ -290,22 +314,23 @@ function chatEndpoints(app) {
           console.log("[DEBUG] headers:", headers);
           const matches = [];
           for (const header of headers) {
-            // Try to match "for <header> <value>" or "<header> <value>"
-            let regex = new RegExp(`(?:for\\s+)?${header.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}[\\s:]*([\\w .'-]+)`, 'i');
+            const escaped = header.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+            // Try to match "for <header> <value>" or "<header> <value>" with word boundaries
+            let regex = new RegExp(`(?:for\\s+)?\\b${escaped}\\b[\\s:]*([\\w .'-]+)`, 'i');
             let match = message.match(regex);
             if (match && match[1].trim()) {
               matches.push({ header, value: match[1].trim() });
               continue;
             }
             // Try to match "<header> is <value>"
-            regex = new RegExp(`${header.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s+is\\s+([\\w .'-]+)`, 'i');
+            regex = new RegExp(`\\b${escaped}\\b\\s+is\\s+([\\w .'-]+)`, 'i');
             match = message.match(regex);
             if (match && match[1].trim()) {
               matches.push({ header, value: match[1].trim() });
               continue;
             }
             // Try to match "<header>: <value>"
-            regex = new RegExp(`${header.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*:\\s*([\\w .'-]+)`, 'i');
+            regex = new RegExp(`\\b${escaped}\\b\\s*:\\s*([\\w .'-]+)`, 'i');
             match = message.match(regex);
             if (match && match[1].trim()) {
               matches.push({ header, value: match[1].trim() });
@@ -314,6 +339,12 @@ function chatEndpoints(app) {
           }
           console.log("[DEBUG] User query:", message);
           console.log("[DEBUG] Matched header/value pairs:", matches);
+
+          // Detect aggregation/range intent to route to PandasAI
+          const hasAggregation = /\b(average|avg|mean|sum|count|min|max|median|std|variance|percent|percentage|total)\b/i.test(message);
+          const pastYearsMatch = message.match(/past\s+(\d+)\s+years?/i);
+          const explicitYearMatch = message.match(/\b(19\d{2}|20\d{2})\b/g);
+
           if (matches.length === 0) {
             console.log("[DEBUG] No header/value matches found. Skipping DuckDB SQL block and falling through to embedding/vector search.");
           } else {
@@ -321,28 +352,35 @@ function chatEndpoints(app) {
           }
           // Check if the user message is a SQL query
           let sqlQuery = null;
-          if (/^\s*(SELECT|WITH)\b/i.test(message)) {
+          const isDirectSql = /^\s*(SELECT|WITH)\b/i.test(message);
+          if (isDirectSql) {
             sqlQuery = message;
             console.log("[DEBUG] Detected direct SQL query from user:", sqlQuery);
-          } else if (matches.length > 0) {
+          } else if (!hasAggregation) {
             const tableName = "csvtable";
-            if (matches.length > 0) {
-                const { header, value } = matches[0];
-                const normalizedHeader = header.trim().toLowerCase().replace(/ /g, '_');
-                console.log("[DEBUG] Normalized header:", normalizedHeader);
-                sqlQuery = `SELECT * FROM ${tableName} WHERE \"${normalizedHeader}\" = '${value}'`;
-                console.log("[CHAT] Generated SQL query:", sqlQuery);
+            // Prefer explicit year queries like "in 1998" or "1998"
+            if (explicitYearMatch && explicitYearMatch.length > 0) {
+              const year = parseInt(explicitYearMatch[explicitYearMatch.length - 1], 10);
+              let selectCols = '*';
+              if (/race\s*time/i.test(message)) selectCols = '"race_time"';
+              else if (/race\s*speed/i.test(message)) selectCols = '"race_speed"';
+              else if (/driver|winner/i.test(message)) selectCols = '"driver"';
+              console.log('[DEBUG] Explicit year detected:', year, 'selectCols:', selectCols);
+              sqlQuery = `SELECT ${selectCols} FROM ${tableName} WHERE "year" = ${year}`;
+              console.log("[CHAT] Generated SQL query (explicit year):", sqlQuery);
+            } else if (!pastYearsMatch && matches.length > 0) {
+              const { header, value } = matches[0];
+              const normalizedHeader = header.trim().toLowerCase().replace(/ /g, '_');
+              console.log("[DEBUG] Normalized header:", normalizedHeader);
+              sqlQuery = `SELECT * FROM ${tableName} WHERE \"${normalizedHeader}\" = '${value}'`;
+              console.log("[CHAT] Generated SQL query (header/value):", sqlQuery);
             }
           }
+
           try {
             const { queryCSV } = require("../services/csvQueryService");
             const doc = allDocs[0]; // Use the first doc for now (adjust if needed)
-            // Add logging for doc info
-            console.log("[DEBUG] DuckDB Query - doc.id:", doc.id);
-            console.log("[DEBUG] DuckDB Query - doc.metadata.url:", doc.metadata.url);
-            if (doc.metadata.row_data) {
-              console.log("[DEBUG] DuckDB Query - sample row_data:", doc.metadata.row_data);
-            }
+            console.log("[DEBUG] DuckDB/PandasAI - doc.id:", doc.id);
             // Ensure doc.metadata is an object
             let metadata = doc.metadata;
             if (typeof metadata === 'string') {
@@ -354,53 +392,118 @@ function chatEndpoints(app) {
                 metadata = {};
               }
             }
-            // Log the full metadata
             console.log('[DEBUG] Full doc.metadata:', metadata);
-            // Add warning if name or url is missing
-            if (!metadata.name) {
-              console.warn('[WARN] doc.metadata.name is missing!');
+
+            // Prefer PandasAI for aggregation/range or when SQL is not generated
+            if (!isDirectSql && (hasAggregation || pastYearsMatch) && !sqlQuery) {
+              console.log('[DEBUG] Routing to PandasAI via /api/query-csv for NL question');
+              // Prefer passing the JSON filename to avoid DB lookups and resolve ambiguity
+              let fileKey = null;
+              if (metadata && (metadata.name || metadata.title)) {
+                const baseName = (metadata.name || metadata.title);
+                fileKey = baseName.replace(/\.csv$/i, '.json');
+              }
+              const payload = {
+                documentId: fileKey || doc.id,
+                question: message,
+                mode: 'nl'
+              };
+              console.log('[DEBUG] /api/query-csv payload:', payload);
+
+              // Add timeout so chat does not hang if PandasAI/Ollama stalls
+              const { AbortController } = require('abort-controller');
+              const controller = new AbortController();
+              const startTs = Date.now();
+              const timeout = setTimeout(() => {
+                console.log('[DEBUG] /api/query-csv aborting after ms:', Date.now() - startTs);
+                controller.abort();
+              }, 12000);
+              let data;
+              try {
+                const res = await fetch("http://localhost:3001/api/query-csv", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                  signal: controller.signal
+                });
+                clearTimeout(timeout);
+                data = await res.json();
+                console.log('[DEBUG] /api/query-csv roundtrip ms:', Date.now() - startTs);
+              } catch (e) {
+                clearTimeout(timeout);
+                console.log('[DEBUG] /api/query-csv request failed after ms:', Date.now() - startTs, 'error:', e.message);
+                data = { success: false, error: e.message };
+              }
+              console.log('[DEBUG] /api/query-csv (PandasAI) response:', data);
+              if (data.success && data.response) {
+                const base = data.response.answer ?? data.response.result ?? data.response;
+                const code = data.response.code;
+                const text = `${typeof base === 'string' ? base : JSON.stringify(base)}${code ? `\n\nCode used (from PandasAI):\n\n\`\`\`python\n${code}\n\`\`\`` : ''}`;
+                require("../utils/helpers/chat/responses").writeResponseChunk(response, {
+                  uuid: require('uuid').v4(),
+                  type: "textResponseChunk",
+                  textResponse: text,
+                  sources: [{ text, metadata: { docId: doc.id, name: metadata.name } }],
+                  close: true,
+                  error: false
+                });
+                response.end();
+                return;
+              }
+              if (!data.success) {
+                // Surface the error so the user sees why it failed
+                const errText = `CSV NL query failed: ${data.error || 'Unknown error'}`;
+                require("../utils/helpers/chat/responses").writeResponseChunk(response, {
+                  uuid: require('uuid').v4(),
+                  type: "textResponseChunk",
+                  textResponse: errText,
+                  sources: [],
+                  close: true,
+                  error: true
+                });
+                response.end();
+                return;
+              }
             }
-            if (!metadata.url) {
-              console.warn('[WARN] doc.metadata.url is missing!');
-            }
-            // Use the JSON chunk file as doc_id for queryCSV
-            const jsonFileName = metadata.name ? metadata.name.replace(/\.csv$/i, '.json') : (metadata.id + '.json');
-            const path = require('path');
-            const jsonFilePath = path.resolve(__dirname, '../storage/documents/custom-documents', jsonFileName);
-            console.log('[DEBUG] Using JSON chunk file for queryCSV:', jsonFilePath);
-            require('../utils/files/csvImportService').loadedCSVDataframes.set(jsonFileName, jsonFilePath);
-            // Call queryCSV with the JSON file as doc_id
-            const duckDbResult = await queryCSV(jsonFileName, sqlQuery);
-            console.log("[CHAT] DuckDB result:", duckDbResult);
-            // Add error handling for result
-            if (duckDbResult.success && duckDbResult.result && Array.isArray(duckDbResult.result.answer) && duckDbResult.result.answer.length > 0) {
-              const row = duckDbResult.result.answer[0];
-              const context = `Here is the result for your query:\n${JSON.stringify(row, null, 2)}`;
-              require("../utils/helpers/chat/responses").writeResponseChunk(response, {
-                uuid: require('uuid').v4(),
-                type: "textResponseChunk",
-                textResponse: context,
-                sources: [{ text: context, metadata: row }],
-                close: true,
-                error: false
-              });
-              response.end();
-              return;
-            } else if (duckDbResult.result && duckDbResult.result.error) {
-              // Send error message to user
-              require("../utils/helpers/chat/responses").writeResponseChunk(response, {
-                uuid: require('uuid').v4(),
-                type: "textResponseChunk",
-                textResponse: `Error: ${duckDbResult.result.error}`,
-                sources: [],
-                close: true,
-                error: true
-              });
-              response.end();
-              return;
+
+            if (sqlQuery) {
+              // Use the JSON chunk file as doc_id for queryCSV
+              const jsonFileName = metadata.name ? metadata.name.replace(/\.csv$/i, '.json') : (metadata.id + '.json');
+              const path = require('path');
+              const jsonFilePath = path.resolve(__dirname, '../storage/documents/custom-documents', jsonFileName);
+              console.log('[DEBUG] Using JSON chunk file for queryCSV:', jsonFilePath);
+              require('../utils/files/csvImportService').loadedCSVDataframes.set(jsonFileName, jsonFilePath);
+              // Call queryCSV with the JSON file as doc_id
+              const duckDbResult = await queryCSV(jsonFileName, sqlQuery);
+              console.log("[CHAT] DuckDB result:", duckDbResult);
+              if (duckDbResult.success && duckDbResult.result && Array.isArray(duckDbResult.result.answer) && duckDbResult.result.answer.length > 0) {
+                const row = duckDbResult.result.answer[0];
+                const context = `Here is the result for your query:\n${JSON.stringify(row, null, 2)}`;
+                require("../utils/helpers/chat/responses").writeResponseChunk(response, {
+                  uuid: require('uuid').v4(),
+                  type: "textResponseChunk",
+                  textResponse: context,
+                  sources: [{ text: context, metadata: row }],
+                  close: true,
+                  error: false
+                });
+                response.end();
+                return;
+              } else if (duckDbResult.result && duckDbResult.result.error) {
+                require("../utils/helpers/chat/responses").writeResponseChunk(response, {
+                  uuid: require('uuid').v4(),
+                  type: "textResponseChunk",
+                  textResponse: `Error: ${duckDbResult.result.error}`,
+                  sources: [],
+                  close: true,
+                  error: true
+                });
+                response.end();
+                return;
+              }
             }
           } catch (err) {
-            console.log("[CHAT] DuckDB query error:", err);
+            console.log("[CHAT] Data query error:", err);
           }
         }
 
