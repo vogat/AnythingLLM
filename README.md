@@ -289,3 +289,150 @@ This project is [MIT](./LICENSE) licensed.
 [repocloud-deploy]: https://repocloud.io/details/?app_id=276
 [elestio-btn]: https://elest.io/images/logos/deploy-to-elestio-btn.png
 [elestio-deploy]: https://elest.io/open-source/anythingllm
+
+## AnythingLLM – CSV Natural Language Querying (DuckDB + PandasAI)
+
+This fork extends AnythingLLM with robust CSV data querying from chat. It routes user questions to either SQL via DuckDB or natural language via PandasAI/Ollama, and adds a deterministic aggregator for common questions.
+
+### What’s implemented
+- **Unified CSV Query API**: `/api/query-csv` (GET/POST)
+  - Resolves document by numeric id, `docId`, or JSON filename under `server/storage/documents/custom-documents`.
+  - Routes intelligently:
+    - Direct SQL (messages starting with `SELECT`/`WITH`) → DuckDB (`query_csv.py`).
+    - NL aggregation like “average … for the past N years” → fast deterministic aggregator (`nl_aggregate.py`).
+    - Other NL questions → PandasAI (`pandasai_query.py`) with Ollama.
+  - Extensive logging, timings, and Python `stderr` capture.
+- **Chat handler integration** (`server/endpoints/chat.js`)
+  - Detects aggregation/range intent and explicit year queries (e.g., “1998”).
+  - For explicit year queries selects columns (e.g., `"race_time"`) and generates correct DuckDB SQL.
+  - Adds a 12s timeout to NL requests to avoid hangs; errors surface to the user instead of stalling.
+- **Python scripts**
+  - `server/scripts/query_csv.py`: Executes SQL on Pandas DataFrames using DuckDB; normalizes columns; logs to `stderr`; JSON to `stdout`; writes `server/query_csv.log`.
+  - `server/scripts/nl_aggregate.py`: Deterministic handler for patterns like “average <col> for the past N years”; automatically handles time formats (HH:MM:SS).
+  - `server/scripts/pandasai_query.py`: NL via PandasAI/Ollama; robust `stderr` logging and JSON `stdout`.
+- **Data ingestion fixes**
+  - `row_data` is stringified before embedding to avoid LanceDB schema errors.
+  - Safer metadata handling during CSV embedding.
+- **Debugging improvements**
+  - Verbose logs across endpoints and scripts, including resolved filenames, branch selection, timings, and Python `stderr` lines.
+
+---
+
+## Quick start
+
+### Prerequisites
+- Node.js >= 18
+- Yarn 1.x
+- Python 3.11+ (3.12 ok) with:
+  - duckdb
+  - pandas==2.2.2
+  - numpy==1.26.4
+  - pandasai (optional, required for PandasAI path)
+- Optional: Ollama running with a pulled model (e.g., `ollama pull llama3:8b`)
+
+### Install
+```
+yarn setup
+```
+This installs packages and prepares env files. If Prisma prompts, follow the on-screen steps.
+
+### Run (dev)
+Open three terminals or use the combined command:
+```
+# Option A: one command
+yarn dev:all
+
+# Option B: separate
+yarn dev:server
+# in another tab
+yarn dev:frontend
+# in another tab
+yarn dev:collector
+```
+- API: http://localhost:3001
+- Frontend: http://localhost:3000
+
+---
+
+## Using the CSV Query API
+
+### Endpoint
+- `POST /api/query-csv`
+- `GET  /api/query-csv`
+
+### Request body/params
+- `documentId` (required): one of
+  - Numeric DB id
+  - `docId` string
+  - JSON filename (recommended), e.g. `Indy 500 Race CSV.json`
+- `question` (required): user question or SQL
+- `mode` (optional): `sql` or `nl`
+- `tableName` (optional): defaults to `csvtable`
+
+### Examples
+- GET (NL aggregator):
+```
+http://localhost:3001/api/query-csv?documentId=Indy%20500%20Race%20CSV.json&question=average%20race%20time%20for%20the%20past%204%20years&mode=nl
+```
+- GET (direct SQL):
+```
+http://localhost:3001/api/query-csv?documentId=Indy%20500%20Race%20CSV.json&question=SELECT%20*%20FROM%20csvtable%20LIMIT%205&mode=sql
+```
+- PowerShell POST (NL):
+```
+Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/query-csv -ContentType 'application/json' -Body '{"documentId":"Indy 500 Race CSV.json","question":"average race time for the past 4 years","mode":"nl"}'
+```
+
+### Chat examples
+- “average race time for the past 4 years” → deterministic aggregator result.
+- “what was the race time in 1998?” → DuckDB SQL generated with `WHERE "year" = 1998` and selected `"race_time"` column.
+
+---
+
+## How it works
+
+1. User asks a question in chat or calls `/api/query-csv`.
+2. The server resolves the JSON file representing the CSV data under `server/storage/documents/custom-documents`.
+3. Routing:
+   - SQL → `query_csv.py` (DuckDB) → JSON answer
+   - Aggregator pattern → `nl_aggregate.py` → JSON answer
+   - Otherwise → `pandasai_query.py` (SmartDataframe + Ollama) → JSON answer
+4. Chat handler formats the result and returns it (with any generated code when using PandasAI).
+
+---
+
+## Configuration notes
+
+- Ollama model can be set with `OLLAMA_MODEL` env var (default: `llama3:8b`).
+- PandasAI + Ollama compatibility:
+  - Some PandasAI versions call `/api/generate`; newer Ollama prefers `/api/chat`.
+  - If PandasAI fails, aggregator and DuckDB paths still answer many questions.
+
+---
+
+## Troubleshooting
+
+- **NL path times out or hangs**: the chat handler aborts after ~12s and shows a clear error. The API endpoint logs `[CSV-QUERY-ENDPOINT]` messages with Python `stderr` lines for diagnosis.
+- **Document not found**: ensure the JSON exists in `server/storage/documents/custom-documents` and pass its exact filename as `documentId`.
+- **DuckDB column errors**: columns are normalized to lowercase with underscores. Use e.g., `"race_time"` not `"Race Time"`.
+- **Python deps (Windows)**: If you see binary incompatibility (numpy/pandas), use `numpy==1.26.4 pandas==2.2.2`.
+- **Git on Windows PATH**: Ensure `C:\Program Files\Git\cmd` and `C:\Program Files\Git\bin` are on PATH (remove file entries like `...\gh.exe`). Restart terminal.
+- **Docker build fails copying `.env.example`**: ensure `docker/.env.example` exists or update Dockerfile to copy a valid source (e.g., `server/.env.example`) or generate one during build.
+- **Line endings warning (CRLF/LF)**: use one of:
+  - `git config --global core.autocrlf true` (common on Windows)
+  - or `git config --global core.autocrlf input` + `git config --global core.eol lf`
+
+---
+
+## File map (new/changed)
+- `server/endpoints/csvQueryEndpoints.js` – unified API; routing + logging
+- `server/endpoints/chat.js` – NL routing, timeouts, explicit-year SQL
+- `server/scripts/query_csv.py` – DuckDB executor
+- `server/scripts/nl_aggregate.py` – deterministic aggregator
+- `server/scripts/pandasai_query.py` – PandasAI/Ollama NL
+- `server/models/documents.js` – CSV ingestion fix: stringify `row_data`
+
+---
+
+## License
+MIT
