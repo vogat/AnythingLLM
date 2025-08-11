@@ -133,7 +133,7 @@ FROM build AS frontend-build
 COPY --chown=anythingllm:anythingllm ./frontend /app/frontend/
 WORKDIR /app/frontend
 RUN set -eux; \
-    VITE_LOG_LEVEL=info DEBUG=vite:* yarn build 2>&1 | tee /tmp/vite-build.log; \
+    VITE_LOG_LEVEL=info DEBUG=vite:* node node_modules/vite/bin/vite.js build --logLevel info --debug 2>&1 | tee /tmp/vite-build.log; \
     status=${PIPESTATUS[0]}; \
     if [ $status -ne 0 ]; then \
       echo '---- Vite build FAILED. Showing first 120 lines ----'; \
@@ -153,7 +153,7 @@ WORKDIR /app
 FROM build AS backend-build
 COPY --chown=anythingllm:anythingllm ./server /app/server/
 WORKDIR /app/server
-RUN yarn install --production --network-timeout 100000 && yarn cache clean
+RUN yarn install --production=false --network-timeout 100000 && yarn cache clean
 WORKDIR /app
 
 # Install collector dependencies
