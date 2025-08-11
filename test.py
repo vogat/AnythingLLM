@@ -1,0 +1,1 @@
+from pandasai.llm.ollama import Ollama
