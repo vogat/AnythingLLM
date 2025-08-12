@@ -128,10 +128,15 @@ RUN echo "Running common build flow of AnythingLLM image for all architectures"
 USER anythingllm
 WORKDIR /app
 
-# Install & Build frontend layer
-FROM build AS frontend-build
-COPY --chown=anythingllm:anythingllm ./frontend /app/frontend/
+#############################################
+# Install & Build frontend layer (Node 20)
+#############################################
+FROM node:20-bullseye-slim AS frontend-build
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /app/frontend
+RUN npm i -g yarn@1.22.19 && yarn --version
+COPY ./frontend /app/frontend/
+RUN yarn install --production=false --network-timeout 100000 && yarn cache clean
 RUN set -eux; \
     VITE_LOG_LEVEL=info DEBUG=vite:* node node_modules/vite/bin/vite.js build --logLevel info --debug 2>&1 | tee /tmp/vite-build.log; \
     status=${PIPESTATUS[0]}; \
