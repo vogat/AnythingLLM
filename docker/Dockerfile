@@ -134,7 +134,7 @@ WORKDIR /app
 FROM node:20-bullseye-slim AS frontend-build
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /app/frontend
-RUN npm i -g yarn@1.22.19 && yarn --version
+RUN corepack enable && corepack prepare yarn@1.22.19 --activate && yarn --version
 COPY ./frontend /app/frontend/
 RUN yarn install --production=false --network-timeout 100000 && yarn cache clean
 RUN set -eux; \
